@@ -1,0 +1,158 @@
+--=========================
+-- Shi Wei X Sicheys - v1.3
+--=========================
+
+-- ⚡ Loading screen
+local TweenService = game:GetService("TweenService")
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+
+local loadingScreen = Instance.new("ScreenGui")
+loadingScreen.Name = "ShiWeiLoading"
+loadingScreen.Parent = game.CoreGui
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(1,0,1,0)
+frame.BackgroundColor3 = Color3.fromRGB(20,20,20)
+frame.Parent = loadingScreen
+
+local label = Instance.new("TextLabel")
+label.Text = "Shi Wei X Sicheys - Loading..."
+label.Size = UDim2.new(1,0,1,0)
+label.TextColor3 = Color3.fromRGB(255,255,255)
+label.TextScaled = true
+label.Parent = frame
+
+wait(2)
+loadingScreen:Destroy()
+
+-- ⚡ UI Library (Orion)
+local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/shlexware/Orion/main/source"))()
+OrionLib:MakeNotification({
+    Name = "Shi Wei X Sicheys",
+    Content = "Script v1.3 đã bật!",
+    Image = "rbxassetid://4483345998",
+    Time = 5
+})
+
+local Window = OrionLib:MakeWindow({
+    Name = "Shi Wei X Sicheys - v1.3",
+    HidePremium = false,
+    SaveConfig = false,
+    IntroEnabled = false
+})
+
+-- ⚡ Tab SET PHÔNG CHỮ
+local Fonts = {
+    ["Georgia"] = Enum.Font.Fantasy,
+    ["Verdana"] = Enum.Font.Roboto,
+    ["Courier New"] = Enum.Font.Code,
+    ["Helvetica"] = Enum.Font.Gotham,
+    ["Arial"] = Enum.Font.Arial,
+    ["Minecraft"] = Enum.Font.Arcade
+}
+
+local mainFont = Enum.Font.Gotham
+
+local TabFont = Window:MakeTab({
+    Name = "SET PHÔNG CHỮ",
+    Icon = "rbxassetid://6034509993",
+    PremiumOnly = false
+})
+
+for name,font in pairs(Fonts) do
+    TabFont:AddButton({
+        Name = name,
+        Callback = function()
+            mainFont = font
+            OrionLib:MakeNotification({
+                Name = "Font changed",
+                Content = "Đã đổi font sang "..name,
+                Time = 3
+            })
+        end
+    })
+end
+
+-- ⚡ Tab AD SCRIPT
+local TabAd = Window:MakeTab({
+    Name = "AD SCRIPT",
+    Icon = "rbxassetid://6034407080",
+    PremiumOnly = false
+})
+
+TabAd:AddParagraph("Author","shi wei")
+TabAd:AddButton({
+    Name = "Discord",
+    Callback = function()
+        setclipboard("https://discord.gg/VRUeqKfDq2")
+    end
+})
+TabAd:AddButton({
+    Name = "Facebook",
+    Callback = function()
+        setclipboard("https://www.facebook.com/share/1JBQN79NvP/")
+    end
+})
+
+-- ⚡ Tab FPS
+local showFPS = false
+local fpsLabel
+
+local TabFPS = Window:MakeTab({
+    Name = "FPS",
+    Icon = "rbxassetid://6034684941",
+    PremiumOnly = false
+})
+
+TabFPS:AddToggle({
+    Name = "Hiện FPS",
+    Default = false,
+    Callback = function(Value)
+        showFPS = Value
+        if Value then
+            fpsLabel = Instance.new("TextLabel")
+            fpsLabel.Size = UDim2.new(0,200,0,50)
+            fpsLabel.Position = UDim2.new(0,10,0,10)
+            fpsLabel.BackgroundTransparency = 1
+            fpsLabel.TextColor3 = Color3.new(1,1,1)
+            fpsLabel.TextScaled = true
+            fpsLabel.Font = mainFont
+            fpsLabel.Parent = game.CoreGui
+
+            spawn(function()
+                while showFPS and fpsLabel do
+                    local fps = math.floor(1 / game:GetService("RunService").RenderStepped:Wait())
+                    fpsLabel.Text = "FPS: "..fps
+                end
+            end)
+        else
+            if fpsLabel then fpsLabel:Destroy() fpsLabel=nil end
+        end
+    end
+})
+
+-- ⚡ Tab Server
+local TeleportService = game:GetService("TeleportService")
+
+local TabServer = Window:MakeTab({
+    Name = "SERVER",
+    Icon = "rbxassetid://6035067836",
+    PremiumOnly = false
+})
+
+TabServer:AddButton({
+    Name = "Join lại server",
+    Callback = function()
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, player)
+    end
+})
+
+TabServer:AddButton({
+    Name = "Join server khác",
+    Callback = function()
+        TeleportService:Teleport(game.PlaceId, player)
+    end
+})
+
+OrionLib:Init()
