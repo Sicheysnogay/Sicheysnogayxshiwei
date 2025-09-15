@@ -1,0 +1,111 @@
+-- Shi Wei X Sicheys - v1.5 -
+-- Full features GUI with toggle, FPS, Graphics, Font, Server tools
+
+local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/shlexware/Orion/main/source')))()
+
+local Window = OrionLib:MakeWindow({
+    Name = "Shi Wei X Sicheys - v1.5",
+    HidePremium = false,
+    SaveConfig = true,
+    ConfigFolder = "ShiWeiHub"
+})
+
+-- Home Tab
+local HomeTab = Window:MakeTab({
+    Name = "Home",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+HomeTab:AddParagraph("Author", "shi wei & sicheys")
+
+-- Font Tab
+local FontTab = Window:MakeTab({
+    Name = "Font",
+    Icon = "rbxassetid://6031071053",
+    PremiumOnly = false
+})
+local fonts = {"Arial", "Gotham", "Minecraft", "Helvetica", "Courier New", "Georgia"}
+for _, f in ipairs(fonts) do
+    FontTab:AddButton({
+        Name = f,
+        Callback = function()
+            for _, v in ipairs(game:GetDescendants()) do
+                if v:IsA("TextLabel") or v:IsA("TextButton") then
+                    v.Font = Enum.Font[f] or Enum.Font.Arial
+                end
+            end
+        end
+    })
+end
+
+-- Graphics Tab
+local GraphicsTab = Window:MakeTab({
+    Name = "Graphics",
+    Icon = "rbxassetid://6031071053",
+    PremiumOnly = false
+})
+GraphicsTab:AddSlider({
+    Name = "Giảm đồ hoạ",
+    Min = 1,
+    Max = 10,
+    Default = 5,
+    Callback = function(value)
+        settings().Rendering.QualityLevel = Enum.QualityLevel["Level"..tostring(value)]
+    end
+})
+
+-- FPS Tab
+local FPSTab = Window:MakeTab({
+    Name = "FPS",
+    Icon = "rbxassetid://6031071053",
+    PremiumOnly = false
+})
+local fpsLabel
+FPSTab:AddToggle({
+    Name = "Hiện FPS",
+    Default = false,
+    Callback = function(state)
+        if state then
+            local RunService = game:GetService("RunService")
+            local gui = Instance.new("TextLabel", game.CoreGui)
+            gui.Size = UDim2.new(0,200,0,50)
+            gui.TextColor3 = Color3.new(1,1,1)
+            gui.BackgroundTransparency = 1
+            gui.TextSize = 20
+            fpsLabel = gui
+            local lastTick = tick()
+            local frames = 0
+            RunService.RenderStepped:Connect(function()
+                frames += 1
+                if tick() - lastTick >= 1 then
+                    fpsLabel.Text = "FPS: "..frames
+                    frames = 0
+                    lastTick = tick()
+                end
+            end)
+        elseif fpsLabel then
+            fpsLabel:Destroy()
+        end
+    end
+})
+
+-- Server Tab
+local ServerTab = Window:MakeTab({
+    Name = "Server",
+    Icon = "rbxassetid://6031071053",
+    PremiumOnly = false
+})
+ServerTab:AddButton({
+    Name = "Join lại server",
+    Callback = function()
+        game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, game.JobId, game.Players.LocalPlayer)
+    end
+})
+ServerTab:AddButton({
+    Name = "Join server ngẫu nhiên",
+    Callback = function()
+        game:GetService("TeleportService"):Teleport(game.PlaceId)
+    end
+})
+
+OrionLib:Init()
