@@ -1,0 +1,318 @@
+-- shiwei-v1.4.txt
+-- Shi Wei X Sicheys - v1.4 - (built-in UI fallback, full features, minimal external deps)
+-- Save this file as .txt or .lua and run with:
+-- loadstring(game:HttpGet("https://raw.githubusercontent.com/<user>/<repo>/main/shiwei-v1.4.txt"))()
+
+-- CONFIG
+local TITLE = "Shi Wei X Sicheys - v1.4"
+local AUTHOR = "shi wei"
+local DISCORD_LINK = "https://discord.gg/VRUeqKfDq2"
+local FACEBOOK_LINK = "https://www.facebook.com/share/1JBQN79NvP/"
+
+-- SERVICES
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local CoreGui = game:GetService("CoreGui")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+local MarketplaceService = game:GetService("MarketplaceService")
+
+-- SAFE parent helper (try CoreGui, fallback to PlayerGui)
+local function safeParentGui(scr)
+    local ok = pcall(function() scr.Parent = CoreGui end)
+    if ok then return true end
+    if LocalPlayer then
+        local ok2, playerGui = pcall(function() return LocalPlayer:WaitForChild("PlayerGui",5) end)
+        if ok2 and playerGui then scr.Parent = playerGui; return true end
+    end
+    -- last resort
+    pcall(function() scr.Parent = CoreGui end)
+    return true
+end
+
+-- Utility: safe notify (small on-screen message)
+local function safeNotify(title, content, duration)
+    duration = duration or 3
+    -- try pasteboard notifications first (no-op if not available)
+    pcall(function()
+        if setclipboard then pcall(setclipboard, content) end
+    end)
+    -- create small ScreenGui message
+    local sg = Instance.new("ScreenGui"); sg.Name = "ShiweiNotify"; sg.ResetOnSpawn = false
+    safeParentGui(sg)
+    local box = Instance.new("TextLabel")
+    box.Size = UDim2.new(0, 360, 0, 60)
+    box.Position = UDim2.new(0.5, -180, 0.05, 0)
+    box.BackgroundColor3 = Color3.fromRGB(20,20,20)
+    box.BackgroundTransparency = 0.1
+    box.TextColor3 = Color3.new(1,1,1)
+    box.TextScaled = true
+    box.Font = Enum.Font.Gotham
+    box.Text = title .. "\n" .. content
+    box.Parent = sg
+    spawn(function() task.wait(duration); pcall(function() sg:Destroy() end) end)
+end
+
+-- Post-effect helpers (create if missing)
+local function ensureEffects()
+    pcall(function()
+        if not Lighting:FindFirstChild("Shiwei_Bloom") then local b = Instance.new("BloomEffect"); b.Name="Shiwei_Bloom"; b.Intensity = 0.5; b.Parent = Lighting end
+        if not Lighting:FindFirstChild("Shiwei_CC") then local c = Instance.new("ColorCorrectionEffect"); c.Name="Shiwei_CC"; c.Contrast = 0; c.Saturation = 0; c.Parent = Lighting end
+        if not Lighting:FindFirstChild("Shiwei_Blur") then local bl = Instance.new("BlurEffect"); bl.Name="Shiwei_Blur"; bl.Size = 0; bl.Parent = Lighting end
+    end)
+end
+ensureEffects()
+
+local function applyGraphicsScale(pct)
+    pct = math.clamp(pct or 60, 20, 90)
+    local t = (pct - 20)/70
+    pcall(function()
+        local bloom = Lighting:FindFirstChild("Shiwei_Bloom")
+        if bloom then bloom.Intensity = 0.2 + t*2 end
+        Lighting.Brightness = 1 + t*2
+        Lighting.OutdoorAmbient = Color3.fromHSV(0.58, 0.2 + t*0.5, 0.6 + t*0.4)
+        local blur = Lighting:FindFirstChild("Shiwei_Blur")
+        if blur then blur.Size = 6*(1-t) end
+        local cc = Lighting:FindFirstChild("Shiwei_CC")
+        if cc then cc.Contrast = -0.1 + t*0.4; cc.Saturation = -0.2 + t*0.6 end
+    end)
+end
+
+-- Font helpers
+local FontMap = {
+    ["Georgia"] = Enum.Font.Fantasy,
+    ["Verdana"] = Enum.Font.Roboto,
+    ["Courier New"] = Enum.Font.Code,
+    ["Helvetica"] = Enum.Font.Gotham,
+    ["Arial"] = Enum.Font.Arial,
+    ["Minecraft"] = Enum.Font.Arcade
+}
+local currentFont = Enum.Font.Gotham
+local fontWatchConn = nil
+local function applyFontToDescendants(fontEnum)
+    for _, obj in pairs(game:GetDescendants()) do
+        if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
+            pcall(function() obj.Font = fontEnum end)
+        end
+    end
+end
+local function startFontWatcher(fontEnum)
+    if fontWatchConn then pcall(function() fontWatchConn:Disconnect() end) end
+    fontWatchConn = game.DescendantAdded:Connect(function(d)
+        if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then pcall(function() d.Font = fontEnum end) end
+        for _, sub in pairs(d:GetDescendants()) do
+            if sub:IsA("TextLabel") or sub:IsA("TextButton") or sub:IsA("TextBox") then pcall(function() sub.Font = fontEnum end) end
+        end
+    end)
+end
+
+-- FPS helpers
+local fpsGui = nil
+local fpsConn = nil
+local function startFPS()
+    if fpsConn then return end
+    fpsGui = Instance.new("ScreenGui"); fpsGui.Name="ShiweiFPS"; fpsGui.ResetOnSpawn=false; safeParentGui(fpsGui)
+    local lbl = Instance.new("TextLabel"); lbl.Size = UDim2.new(0,120,0,30); lbl.Position = UDim2.new(0,10,0,10); lbl.BackgroundTransparency = 0.4; lbl.BackgroundColor3 = Color3.new(0,0,0); lbl.TextColor3 = Color3.new(1,1,1); lbl.TextScaled=true; lbl.Font = currentFont; lbl.Text="FPS: ..."; lbl.Parent = fpsGui
+    local last = tick(); local frames = 0
+    fpsConn = RunService.RenderStepped:Connect(function(dt)
+        frames = frames + 1
+        if tick() - last >= 1 then
+            local f = math.floor(frames / (tick() - last) + 0.5)
+            pcall(function() if lbl then lbl.Text = "FPS: "..tostring(f) end end)
+            frames = 0; last = tick()
+        end
+    end)
+end
+local function stopFPS()
+    if fpsConn then fpsConn:Disconnect(); fpsConn=nil end
+    if fpsGui and fpsGui.Parent then pcall(function() fpsGui:Destroy() end) end
+    fpsGui = nil
+end
+
+-- SERVER helpers (rejoin, join other, low-pop)
+local function rejoinServer()
+    pcall(function() TeleportService:Teleport(game.PlaceId, LocalPlayer) end)
+end
+local function joinOtherServer()
+    pcall(function() TeleportService:Teleport(game.PlaceId, LocalPlayer) end)
+end
+local function joinLowPopServer()
+    local requestFunc = nil
+    if syn and syn.request then requestFunc = syn.request elseif request then requestFunc = request elseif http and http.request then requestFunc = http.request end
+    if not requestFunc then safeNotify("Info","HTTP request not supported by executor",3); return end
+    local placeId = tostring(game.PlaceId)
+    local url = "https://games.roblox.com/v1/games/"..placeId.."/servers/Public?limit=100"
+    local ok, res = pcall(function() return requestFunc({Url = url, Method = "GET"}) end)
+    if not ok or not res or not res.Body then safeNotify("Info","Cannot fetch server list",3); return end
+    local ok2, data = pcall(function() return HttpService:JSONDecode(res.Body) end)
+    if not ok2 or not data or not data.data then safeNotify("Info","No server data",3); return end
+    for _, s in ipairs(data.data) do
+        if s.playing and s.playing < (Players.MaxPlayers or 10) then
+            pcall(function() TeleportService:TeleportToPlaceInstance(game.PlaceId, s.id, LocalPlayer) end)
+            return
+        end
+    end
+    safeNotify("Info","No low-pop server found",3)
+end
+
+-- ---------- BUILD SIMPLE BUILTIN UI (single-file, minimal assumptions) ----------
+local function createUI()
+    -- main screen gui
+    local sg = Instance.new("ScreenGui"); sg.Name = "ShiweiGUI"; sg.ResetOnSpawn = false
+    safeParentGui(sg)
+
+    -- main frame
+    local main = Instance.new("Frame"); main.Name="Main"; main.Size=UDim2.new(0,760,0,440); main.Position = UDim2.new(0.5,-380,0.2,0); main.BackgroundColor3 = Color3.fromRGB(28,28,28); main.BorderSizePixel = 0; main.Parent = sg
+
+    -- title
+    local title = Instance.new("TextLabel"); title.Size=UDim2.new(1,0,0,34); title.Position=UDim2.new(0,0,0,0); title.BackgroundTransparency=1; title.TextColor3=Color3.new(1,1,1); title.Font=Enum.Font.GothamBold; title.TextSize=18; title.Text=TITLE; title.Parent = main
+
+    -- left panel (tabs)
+    local left = Instance.new("Frame"); left.Size=UDim2.new(0,160,1,-34); left.Position=UDim2.new(0,0,0,34); left.BackgroundColor3=Color3.fromRGB(22,22,22); left.Parent = main
+    local content = Instance.new("Frame"); content.Size=UDim2.new(1,-160,1,-34); content.Position=UDim2.new(0,160,0,34); content.BackgroundTransparency = 1; content.Parent = main
+
+    -- helper to create pages
+    local pages = {}
+    local function createPage(name)
+        local p = Instance.new("Frame"); p.Size = UDim2.new(1,0,1,0); p.Position = UDim2.new(0,0,0,0); p.BackgroundTransparency = 1; p.Visible = false; p.Parent = content
+        pages[name] = p
+        return p
+    end
+
+    -- create tab button helper
+    local function createTabButton(txt, yIndex)
+        local b = Instance.new("TextButton"); b.Size=UDim2.new(1,-8,0,40); b.Position = UDim2.new(0,4,0,8 + (yIndex-1)*46); b.BackgroundColor3 = Color3.fromRGB(45,45,45); b.TextColor3 = Color3.new(1,1,1); b.Font = Enum.Font.Gotham; b.Text = txt; b.Parent = left
+        return b
+    end
+
+    -- pages
+    local home = createPage("Home")
+    local fontp = createPage("Font")
+    local graphics = createPage("Graphics")
+    local fpsP = createPage("FPS")
+    local serverP = createPage("Server")
+    local misc = createPage("Misc")
+
+    -- show page helper
+    local currentPage = nil
+    local function showPage(name)
+        for k,v in pairs(pages) do v.Visible = (k == name) end
+        currentPage = name
+    end
+
+    -- tab buttons
+    local tabs = {"Home","Font","Graphics","FPS","Server","Misc"}
+    for i,tname in ipairs(tabs) do
+        local btn = createTabButton(tname, i)
+        btn.MouseButton1Click:Connect(function() showPage(tname) end)
+    end
+    showPage("Home")
+
+    -- Home content
+    local hTitle = Instance.new("TextLabel"); hTitle.Text="Author: "..AUTHOR; hTitle.Size=UDim2.new(1, -20, 0, 24); hTitle.Position=UDim2.new(0,10,0,8); hTitle.BackgroundTransparency=1; hTitle.TextColor3=Color3.new(1,1,1); hTitle.Font=Enum.Font.Gotham; hTitle.Parent = home
+    local discordBtn = Instance.new("TextButton"); discordBtn.Text="Copy Discord Link"; discordBtn.Size=UDim2.new(0,220,0,34); discordBtn.Position=UDim2.new(0,10,0,40); discordBtn.Parent = home
+    discordBtn.MouseButton1Click:Connect(function() pcall(function() if setclipboard then setclipboard(DISCORD_LINK) end end); safeNotify("Discord","Copied to clipboard",2) end)
+    local fbBtn = Instance.new("TextButton"); fbBtn.Text="Copy Facebook Link"; fbBtn.Size=UDim2.new(0,220,0,34); fbBtn.Position=UDim2.new(0,240,0,40); fbBtn.Parent = home
+    fbBtn.MouseButton1Click:Connect(function() pcall(function() if setclipboard then setclipboard(FACEBOOK_LINK) end end); safeNotify("Facebook","Copied to clipboard",2) end)
+
+    -- FONT page content (buttons)
+    local y = 8
+    for name, fontEnum in pairs(FontMap) do
+        local b = Instance.new("TextButton"); b.Size=UDim2.new(0,180,0,34); b.Position=UDim2.new(0,10,0,y); b.Text = name; b.Parent = fontp; b.BackgroundColor3=Color3.fromRGB(45,45,45); b.TextColor3=Color3.new(1,1,1)
+        b.MouseButton1Click:Connect(function()
+            currentFont = fontEnum
+            applyFontToDescendants(currentFont)
+            startFontWatcher(currentFont)
+            safeNotify("Font","Đã đổi font: "..name,2)
+        end)
+        y = y + 40
+    end
+
+    -- Graphics page: slider and toggles
+    local gLabel = Instance.new("TextLabel"); gLabel.Text="Graphics Scale: 60%"; gLabel.Size=UDim2.new(0,340,0,24); gLabel.Position=UDim2.new(0,10,0,8); gLabel.BackgroundTransparency=1; gLabel.TextColor3=Color3.new(1,1,1); gLabel.Parent = graphics
+    -- slider bar
+    local sBar = Instance.new("Frame"); sBar.Size=UDim2.new(0,340,0,16); sBar.Position=UDim2.new(0,10,0,40); sBar.BackgroundColor3=Color3.fromRGB(60,60,60); sBar.Parent = graphics
+    local sHandle = Instance.new("Frame"); sHandle.Size=UDim2.new(0.6,0,1,0); sHandle.BackgroundColor3=Color3.fromRGB(0,170,255); sHandle.Parent = sBar
+    local dragging = false
+    local minV, maxV = 20, 90
+    local function setSliderFromX(x)
+        local rel = math.clamp((x - sBar.AbsolutePosition.X)/sBar.AbsoluteSize.X, 0, 1)
+        sHandle.Size = UDim2.new(rel,0,1,0)
+        local val = math.floor(minV + rel*(maxV - minV) + 0.5)
+        gLabel.Text = "Graphics Scale: "..tostring(val).."%"
+        applyGraphicsScale(val)
+    end
+    sBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+        end
+    end)
+    sBar.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end)
+    game:GetService("UserInputService").InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            setSliderFromX(input.Position.X)
+        end
+    end)
+    -- fog toggle
+    local fogToggle = Instance.new("TextButton"); fogToggle.Text="Remove Fog [OFF]"; fogToggle.Size=UDim2.new(0,220,0,34); fogToggle.Position=UDim2.new(0,10,0,80); fogToggle.Parent = graphics
+    local fogOn = false
+    fogToggle.MouseButton1Click:Connect(function()
+        fogOn = not fogOn
+        fogToggle.Text = "Remove Fog ["..(fogOn and "ON" or "OFF").."]"
+        if fogOn then pcall(function() Lighting.FogStart = 1e6; Lighting.FogEnd = 1e9 end) else pcall(function() Lighting.FogStart = 0; Lighting.FogEnd = 100000 end) end
+    end)
+    -- visual boost toggle
+    local boostToggle = Instance.new("TextButton"); boostToggle.Text="Visual Boost [OFF]"; boostToggle.Size=UDim2.new(0,220,0,34); boostToggle.Position=UDim2.new(0,240,0,80); boostToggle.Parent = graphics
+    local boostOn = false
+    boostToggle.MouseButton1Click:Connect(function()
+        boostOn = not boostOn
+        boostToggle.Text = "Visual Boost ["..(boostOn and "ON" or "OFF").."]"
+        if boostOn then pcall(function() local b = Lighting:FindFirstChild("Shiwei_Bloom"); if b then b.Intensity = (b.Intensity or 0.5)*1.4 end local c = Lighting:FindFirstChild("Shiwei_CC"); if c then c.Contrast = (c.Contrast or 0) + 0.12; c.Saturation = (c.Saturation or 0) + 0.08 end end) else applyGraphicsScale(60) end
+    end)
+
+    -- FPS page
+    local fpsToggle = Instance.new("TextButton"); fpsToggle.Text="Show FPS [OFF]"; fpsToggle.Size=UDim2.new(0,220,0,34); fpsToggle.Position=UDim2.new(0,10,0,8); fpsToggle.Parent = fpsP
+    local fpsShowing = false
+    fpsToggle.MouseButton1Click:Connect(function()
+        fpsShowing = not fpsShowing
+        fpsToggle.Text = "Show FPS ["..(fpsShowing and "ON" or "OFF").."]"
+        if fpsShowing then startFPS() else stopFPS() end
+    end)
+
+    -- SERVER page
+    local playersLabel = Instance.new("TextLabel"); playersLabel.Text = "Players: "..tostring(#Players:GetPlayers()); playersLabel.Size=UDim2.new(0,220,0,24); playersLabel.Position=UDim2.new(0,10,0,8); playersLabel.BackgroundTransparency=1; playersLabel.TextColor3=Color3.new(1,1,1); playersLabel.Parent = serverP
+    local rejoinBtn = Instance.new("TextButton"); rejoinBtn.Text="Rejoin Server"; rejoinBtn.Size=UDim2.new(0,220,0,34); rejoinBtn.Position=UDim2.new(0,10,0,40); rejoinBtn.Parent = serverP
+    rejoinBtn.MouseButton1Click:Connect(function() rejoinServer() end)
+    local joinOtherBtn = Instance.new("TextButton"); joinOtherBtn.Text="Join Other Server"; joinOtherBtn.Size=UDim2.new(0,220,0,34); joinOtherBtn.Position=UDim2.new(0,240,0,40); joinOtherBtn.Parent = serverP
+    joinOtherBtn.MouseButton1Click:Connect(function() joinOtherServer() end)
+    local joinLowBtn = Instance.new("TextButton"); joinLowBtn.Text="Join Low Pop Server"; joinLowBtn.Size=UDim2.new(0,220,0,34); joinLowBtn.Position=UDim2.new(0,10,0,90); joinLowBtn.Parent = serverP
+    joinLowBtn.MouseButton1Click:Connect(function() joinLowPopServer() end)
+
+    -- update player count periodically
+    spawn(function()
+        while true do
+            pcall(function() playersLabel.Text = "Players: "..tostring(#Players:GetPlayers()) end)
+            task.wait(5)
+        end
+    end)
+
+    -- MISC page: show game name
+    local ok, info = pcall(function() return MarketplaceService:GetProductInfo(game.PlaceId) end)
+    if ok and info and info.Name then
+        local gLabel = Instance.new("TextLabel"); gLabel.Text = "Game: "..tostring(info.Name); gLabel.Size=UDim2.new(1,-20,0,24); gLabel.Position=UDim2.new(0,10,0,8); gLabel.BackgroundTransparency=1; gLabel.TextColor3=Color3.new(1,1,1); gLabel.Parent = misc
+    end
+
+    -- set defaults
+    applyGraphicsScale(60)
+    startFontWatcher(currentFont)
+
+    return sg
+end
+
+-- Create UI
+local ok, ui = pcall(function() return createUI() end)
+if ok then safeNotify("Shiwei","Loaded v1.4 (built-in UI)",2) else warn("Failed to create UI") end
+
+-- EOF
