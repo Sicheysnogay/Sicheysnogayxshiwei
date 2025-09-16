@@ -1,0 +1,328 @@
+-- shiwei-v1.6.txt
+-- Shi Wei X Sicheys - v1.6 (Full) - Rayfield preferred, fallback built-in UI
+-- Features: Font changer (applies to existing + new GUIs), Graphics controls (20-90%), FPS toggle, Server tools,
+-- Discord/Facebook copy, Logo fixed to ID 15307540185, safe pcall wrappers to reduce executor errors.
+-- Save as .txt or .lua and run with:
+-- loadstring(game:HttpGet("https://raw.githubusercontent.com/<user>/<repo>/main/shiwei-v1.6.txt"))()
+
+-- CONFIG
+local TITLE = "Shi Wei X Sicheys - v1.6"
+local AUTHOR = "shi wei"
+local LOGO_ASSET = "rbxassetid://15307540185" -- updated logo ID
+
+-- SERVICES
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local CoreGui = game:GetService("CoreGui")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+local MarketplaceService = game:GetService("MarketplaceService")
+local UserInputService = game:GetService("UserInputService")
+
+-- SAFE parent helper
+local function safeParentGui(gui)
+    local ok = pcall(function() gui.Parent = CoreGui end)
+    if ok then return true end
+    if LocalPlayer then
+        local ok2, pg = pcall(function() return LocalPlayer:WaitForChild("PlayerGui",5) end)
+        if ok2 and pg then gui.Parent = pg; return true end
+    end
+    pcall(function() gui.Parent = CoreGui end)
+    return true
+end
+
+-- Try load Rayfield (preferred) then Orion; if both fail, fall back to built-in minimal UI
+local UI = { type = "none", lib = nil }
+
+local function tryLoad(url)
+    local ok, res = pcall(function() return loadstring(game:HttpGet(url))() end)
+    if ok and res then return res end
+    return nil
+end
+
+local try_list = {
+    "https://sirius.menu/rayfield",
+    "https://raw.githubusercontent.com/itsLukeCrawford/rayfield/master/source.lua",
+    "https://raw.githubusercontent.com/shlexware/Orion/main/source"
+}
+
+for _,u in ipairs(try_list) do
+    local ok, lib = pcall(function() return tryLoad(u) end)
+    if ok and lib then
+        UI.lib = lib
+        if tostring(u):find("rayfield") then UI.type = "rayfield" else UI.type = "orion" end
+        break
+    end
+end
+
+-- Simple notify
+local function notify(title, content, time)
+    time = time or 2
+    pcall(function()
+        if UI.type == "rayfield" and UI.lib and UI.lib.Notify then
+            UI.lib:Notify({Title = title, Content = content, Duration = time})
+            return
+        elseif UI.type == "orion" and UI.lib and UI.lib.MakeNotification then
+            UI.lib:MakeNotification({Name = title, Content = content, Time = time})
+            return
+        else
+            local sg = Instance.new("ScreenGui"); sg.Name = "ShiweiNotify"; sg.ResetOnSpawn = false; safeParentGui(sg)
+            local lbl = Instance.new("TextLabel"); lbl.Size = UDim2.new(0,380,0,60); lbl.Position = UDim2.new(0.5,-190,0.05,0)
+            lbl.BackgroundColor3 = Color3.fromRGB(25,25,25); lbl.TextColor3 = Color3.new(1,1,1); lbl.TextScaled = true
+            lbl.Font = Enum.Font.Gotham; lbl.Text = title .. "\n" .. content; lbl.Parent = sg
+            task.spawn(function() task.wait(time); pcall(function() sg:Destroy() end) end)
+        end
+    end)
+end
+
+-- Ensure effects
+local function ensureEffects()
+    pcall(function()
+        if not Lighting:FindFirstChild("Shiwei_Bloom") then local b = Instance.new("BloomEffect"); b.Name="Shiwei_Bloom"; b.Intensity = 0.5; b.Parent = Lighting end
+        if not Lighting:FindFirstChild("Shiwei_CC") then local c = Instance.new("ColorCorrectionEffect"); c.Name="Shiwei_CC"; c.Contrast = 0; c.Saturation = 0; c.Parent = Lighting end
+        if not Lighting:FindFirstChild("Shiwei_Blur") then local bl = Instance.new("BlurEffect"); bl.Name="Shiwei_Blur"; bl.Size = 0; bl.Parent = Lighting end
+    end)
+end
+ensureEffects()
+
+local function applyGraphicsScale(pct)
+    pct = math.clamp(pct or 60, 20, 90)
+    local t = (pct - 20)/70
+    pcall(function()
+        local bloom = Lighting:FindFirstChild("Shiwei_Bloom")
+        if bloom then bloom.Intensity = 0.2 + t*2 end
+        Lighting.Brightness = 1 + t*2
+        Lighting.OutdoorAmbient = Color3.fromHSV(0.58, 0.2 + t*0.5, 0.6 + t*0.4)
+        local blur = Lighting:FindFirstChild("Shiwei_Blur")
+        if blur then blur.Size = 6*(1-t) end
+        local cc = Lighting:FindFirstChild("Shiwei_CC")
+        if cc then cc.Contrast = -0.1 + t*0.4; cc.Saturation = -0.2 + t*0.6 end
+    end)
+end
+
+-- Font management
+local FontMap = {
+    ["Georgia"] = Enum.Font.Fantasy,
+    ["Verdana"] = Enum.Font.Roboto,
+    ["Courier New"] = Enum.Font.Code,
+    ["Helvetica"] = Enum.Font.Gotham,
+    ["Arial"] = Enum.Font.Arial,
+    ["Minecraft"] = Enum.Font.Arcade
+}
+local currentFont = Enum.Font.Gotham
+local fontWatchConn = nil
+
+local function applyFontAll(fontEnum)
+    for _,obj in pairs(game:GetDescendants()) do
+        if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
+            pcall(function() obj.Font = fontEnum end)
+        end
+    end
+end
+
+local function startFontWatcher(fontEnum)
+    if fontWatchConn then pcall(function() fontWatchConn:Disconnect() end) end
+    fontWatchConn = game.DescendantAdded:Connect(function(d)
+        if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then pcall(function() d.Font = fontEnum end) end
+        for _,sub in pairs(d:GetDescendants()) do
+            if sub:IsA("TextLabel") or sub:IsA("TextButton") or sub:IsA("TextBox") then pcall(function() sub.Font = fontEnum end) end
+        end
+    end)
+end
+
+-- FPS
+local fpsGui, fpsConn = nil, nil
+local function startFPS()
+    if fpsConn then return end
+    local sg = Instance.new("ScreenGui"); sg.Name="ShiweiFPS"; sg.ResetOnSpawn=false; safeParentGui(sg)
+    local lbl = Instance.new("TextLabel"); lbl.Size = UDim2.new(0,120,0,30); lbl.Position = UDim2.new(0,10,0,10); lbl.BackgroundTransparency=0.4; lbl.BackgroundColor3=Color3.new(0,0,0); lbl.TextColor3=Color3.new(1,1,1); lbl.TextScaled=true; lbl.Font = currentFont; lbl.Text="FPS: ..."; lbl.Parent = sg
+    fpsGui = sg
+    local last = tick(); local frames = 0
+    fpsConn = RunService.RenderStepped:Connect(function(dt)
+        frames = frames + 1
+        if tick() - last >= 1 then
+            local f = math.floor(frames / (tick() - last) + 0.5)
+            pcall(function() if lbl then lbl.Text = "FPS: "..tostring(f) end end)
+            frames = 0; last = tick()
+        end
+    end)
+end
+local function stopFPS()
+    if fpsConn then fpsConn:Disconnect(); fpsConn=nil end
+    if fpsGui and fpsGui.Parent then pcall(function() fpsGui:Destroy() end) end
+    fpsGui = nil
+end
+
+-- Server helpers (best-effort low-pop join)
+local function joinLowPopServer()
+    local requestFunc = nil
+    if syn and syn.request then requestFunc = syn.request elseif request then requestFunc = request elseif http and http.request then requestFunc = http.request end
+    if not requestFunc then notify("Info","HTTP not supported",2); return end
+    local placeId = tostring(game.PlaceId)
+    local url = "https://games.roblox.com/v1/games/"..placeId.."/servers/Public?limit=100"
+    local ok, res = pcall(function() return requestFunc({Url = url, Method = "GET"}) end)
+    if not ok or not res or not res.Body then notify("Info","Cannot fetch servers",2); return end
+    local ok2, data = pcall(function() return HttpService:JSONDecode(res.Body) end)
+    if not ok2 or not data or not data.data then notify("Info","No server data",2); return end
+    for _,s in ipairs(data.data) do
+        if s.playing and s.playing < (Players.MaxPlayers or 10) then
+            pcall(function() TeleportService:TeleportToPlaceInstance(game.PlaceId, s.id, LocalPlayer) end)
+            return
+        end
+    end
+    notify("Info","No low-pop server found",2)
+end
+
+-- Build UI using Rayfield or fallback to simple builtin UI
+local WindowObj = nil
+
+if UI.type == "rayfield" then
+    WindowObj = UI.lib:CreateWindow({
+        Name = TITLE,
+        LoadingTitle = TITLE,
+        LoadingSubtitle = "by "..AUTHOR,
+        ConfigurationSaving = { Enabled = true, FolderName = "ShiweiHub", FileName = "shiwei-v1.6" }
+    })
+elseif UI.type == "orion" then
+    WindowObj = UI.lib:MakeWindow({ Name = TITLE, HidePremium = false, SaveConfig = true, ConfigFolder = "ShiweiHub" })
+else
+    -- simple built-in window
+    local Builtin = {}
+    function Builtin:MakeWindow(opts)
+        local win = {}
+        win._sg = Instance.new("ScreenGui"); win._sg.Name = "ShiweiBuiltin"; win._sg.ResetOnSpawn=false; safeParentGui(win._sg)
+        local frame = Instance.new("Frame"); frame.Size=UDim2.new(0,520,0,360); frame.Position=UDim2.new(0.5,-260,0.2,0); frame.BackgroundColor3=Color3.fromRGB(30,30,30); frame.Parent = win._sg
+        local title = Instance.new("TextLabel"); title.Size=UDim2.new(1,0,0,28); title.Position=UDim2.new(0,0,0,0); title.BackgroundTransparency=1; title.TextColor3=Color3.new(1,1,1); title.Font=Enum.Font.GothamBold; title.TextSize=18; title.Text=opts.Name or TITLE; title.Parent=frame
+        win._main = frame
+        function win:MakeTab(tbl) local tab = {}; tab._frame = Instance.new("Frame"); tab._frame.Size = UDim2.new(1, -10, 1, -38); tab._frame.Position = UDim2.new(0,5,0,34); tab._frame.BackgroundTransparency=1; tab._frame.Parent = frame
+            function tab:CreateLabel(txt) local l=Instance.new("TextLabel"); l.Size=UDim2.new(1,-20,0,20); l.BackgroundTransparency=1; l.TextColor3=Color3.new(1,1,1); l.Text=txt; l.Parent=tab._frame end
+            function tab:CreateButton(opt) local b=Instance.new("TextButton"); b.Size=UDim2.new(0,200,0,30); b.BackgroundColor3=Color3.fromRGB(50,50,50); b.TextColor3=Color3.new(1,1,1); b.Text=opt.Name or "Btn"; b.Parent=tab._frame; b.MouseButton1Click:Connect(function() pcall(opt.Callback) end) end
+            function tab:CreateToggle(opt) local b=Instance.new("TextButton"); b.Size=UDim2.new(0,200,0,30); b.Text=(opt.Name or "Toggle").." [OFF]"; b.Parent=tab._frame; local s=opt.Default or false; b.MouseButton1Click:Connect(function() s=not s; b.Text=(opt.Name or "Toggle")..(s and " [ON]" or " [OFF]"); pcall(opt.Callback,s) end) end
+            function tab:CreateSlider(opt) local lbl=Instance.new("TextLabel"); lbl.Size=UDim2.new(0,380,0,20); lbl.Text=(opt.Name or "Slider").." : "..(opt.Default or 0); lbl.BackgroundTransparency=1; lbl.TextColor3=Color3.new(1,1,1); lbl.Parent=tab._frame; local bar=Instance.new("Frame"); bar.Size=UDim2.new(0,380,0,10); bar.BackgroundColor3=Color3.fromRGB(60,60,60); bar.Parent=tab._frame; local handle=Instance.new("Frame"); handle.Size=UDim2.new(((opt.Default or 0)-(opt.Min or 0))/((opt.Max or 100)-(opt.Min or 0)),0,1,0); handle.BackgroundColor3=Color3.fromRGB(0,170,255); handle.Parent=bar; end
+            return tab
+        end
+        function win:Init() end
+        return win
+    end
+    WindowObj = Builtin:MakeWindow({ Name = TITLE })
+end
+
+-- Uniform tab creation function
+local function MakeTab(name)
+    if UI.type == "rayfield" then return WindowObj:CreateTab(name) end
+    if UI.type == "orion" then return WindowObj:MakeTab({ Name = name }) end
+    return WindowObj:MakeTab({ Name = name })
+end
+
+local TabHome = MakeTab("Home")
+local TabFont = MakeTab("SET PHÔNG CHỮ")
+local TabGraphics = MakeTab("GRAPHICS")
+local TabFPS = MakeTab("FPS")
+local TabServer = MakeTab("SERVER")
+local TabMisc = MakeTab("MISC")
+
+-- HOME content (logo + links)
+local function createLogoLabel(tab)
+    pcall(function()
+        if UI.type == "rayfield" then
+            tab:CreateLabel("Author: "..AUTHOR)
+        elseif UI.type == "orion" then
+            tab:AddParagraph("Author", AUTHOR)
+        else
+            tab:CreateLabel("Author: "..AUTHOR)
+        end
+    end)
+    pcall(function()
+        -- show logo if builtin: create ImageLabel
+        if UI.type ~= "rayfield" and UI.type ~= "orion" then
+            local lbl = Instance.new("ImageLabel"); lbl.Size = UDim2.new(0,100,0,100); lbl.Position = UDim2.new(0.6,0,0,6); lbl.Image = LOGO_ASSET; lbl.BackgroundTransparency = 1; lbl.Parent = WindowObj._main
+        end
+    end)
+end
+
+createLogoLabel(TabHome)
+
+-- HOME buttons
+if UI.type == "rayfield" then
+    TabHome:CreateButton({ Name = "Copy Discord", Callback = function() pcall(setclipboard, "https://discord.gg/VRUeqKfDq2"); UI.lib:Notify({Title="Copied", Content="Discord copied", Duration=2}) end })
+    TabHome:CreateButton({ Name = "Copy Facebook", Callback = function() pcall(setclipboard, "https://www.facebook.com/share/1JBQN79NvP/"); UI.lib:Notify({Title="Copied", Content="Facebook copied", Duration=2}) end })
+elseif UI.type == "orion" then
+    TabHome:AddButton({ Name = "Copy Discord", Callback = function() pcall(setclipboard, "https://discord.gg/VRUeqKfDq2"); UI.lib:MakeNotification({Name="Copied", Content="Discord copied", Time=2}) end })
+    TabHome:AddButton({ Name = "Copy Facebook", Callback = function() pcall(setclipboard, "https://www.facebook.com/share/1JBQN79NvP/"); UI.lib:MakeNotification({Name="Copied", Content="Facebook copied", Time=2}) end })
+else
+    TabHome:CreateButton({ Name = "Copy Discord", Callback = function() pcall(function() if setclipboard then setclipboard("https://discord.gg/VRUeqKfDq2") end end) end })
+    TabHome:CreateButton({ Name = "Copy Facebook", Callback = function() pcall(function() if setclipboard then setclipboard("https://www.facebook.com/share/1JBQN79NvP/") end end) end })
+end
+
+-- FONT tab
+for name, f in pairs(FontMap) do
+    if UI.type == "rayfield" then
+        TabFont:CreateLabel(" ")
+        TabFont:CreateButton({ Name = name, Callback = function() currentFont = f; applyFontAll(currentFont); startFontWatcher(currentFont); UI.lib:Notify({Title="Font", Content="Đã đổi sang "..name, Duration=2}) end })
+    elseif UI.type == "orion" then
+        TabFont:AddButton({ Name = name, Callback = function() currentFont = f; applyFontAll(currentFont); startFontWatcher(currentFont); UI.lib:MakeNotification({Name="Font", Content="Đã đổi sang "..name, Time=2}) end })
+    else
+        TabFont:CreateButton({ Name = name, Callback = function() currentFont = f; applyFontAll(currentFont); startFontWatcher(currentFont) end })
+    end
+end
+
+-- GRAPHICS controls
+if UI.type == "rayfield" then
+    TabGraphics:CreateSlider({ Name = "Graphics Scale (20-90)", Min = 20, Max = 90, Current = 60, Flag = "gscale", Callback = function(v) applyGraphicsScale(v) end })
+    TabGraphics:CreateToggle({ Name = "Remove Fog", Current = false, Flag = "nofog", Callback = function(state) if state then Lighting.FogStart=1e6; Lighting.FogEnd=1e9 else Lighting.FogStart=0; Lighting.FogEnd=100000 end end })
+    TabGraphics:CreateToggle({ Name = "Visual Boost", Current = false, Flag = "boost", Callback = function(state) if state then pcall(function() if Lighting:FindFirstChild("Shiwei_Bloom") then Lighting.Shiwei_Bloom.Intensity = Lighting.Shiwei_Bloom.Intensity*1.4 end end) else applyGraphicsScale(60) end end })
+elseif UI.type == "orion" then
+    TabGraphics:AddSlider({ Title = "Graphics Scale (20-90)", Default = 60, Min = 20, Max = 90, Callback = function(v) applyGraphicsScale(v) end })
+    TabGraphics:AddToggle({ Title = "Remove Fog", Default = false, Callback = function(state) if state then Lighting.FogStart=1e6; Lighting.FogEnd=1e9 else Lighting.FogStart=0; Lighting.FogEnd=100000 end end })
+    TabGraphics:AddToggle({ Title = "Visual Boost", Default = false, Callback = function(state) if state then pcall(function() if Lighting:FindFirstChild("Shiwei_Bloom") then Lighting.Shiwei_Bloom.Intensity = Lighting.Shiwei_Bloom.Intensity*1.4 end end) else applyGraphicsScale(60) end end })
+else
+    TabGraphics:CreateLabel("Graphics Scale: use slider below")
+    TabGraphics:CreateSlider({ Name = "Graphics Scale", Min = 20, Max = 90, Default = 60, Callback = function(v) applyGraphicsScale(v) end })
+    TabGraphics:CreateToggle({ Name = "Remove Fog", Default = false, Callback = function(state) if state then Lighting.FogStart=1e6; Lighting.FogEnd=1e9 else Lighting.FogStart=0; Lighting.FogEnd=100000 end end })
+    TabGraphics:CreateToggle({ Name = "Visual Boost", Default = false, Callback = function(state) if state then pcall(function() if Lighting:FindFirstChild("Shiwei_Bloom") then Lighting.Shiwei_Bloom.Intensity = Lighting.Shiwei_Bloom.Intensity*1.4 end end) else applyGraphicsScale(60) end end })
+end
+
+-- FPS tab
+if UI.type == "rayfield" then
+    TabFPS:CreateToggle({ Name = "Show FPS", Current = false, Flag = "showfps", Callback = function(state) if state then startFPS() else stopFPS() end end })
+elseif UI.type == "orion" then
+    TabFPS:AddToggle({ Name = "Show FPS", Default = false, Callback = function(state) if state then startFPS() else stopFPS() end end })
+else
+    TabFPS:CreateToggle({ Name = "Show FPS", Default = false, Callback = function(state) if state then startFPS() else stopFPS() end end })
+end
+
+-- SERVER tab
+if UI.type == "rayfield" then
+    TabServer:CreateLabel("Players: "..tostring(#Players:GetPlayers()))
+    TabServer:CreateButton({ Name = "Rejoin Server", Callback = function() pcall(function() TeleportService:Teleport(game.PlaceId, LocalPlayer) end) end })
+    TabServer:CreateButton({ Name = "Join Other Server", Callback = function() pcall(function() TeleportService:Teleport(game.PlaceId, LocalPlayer) end) end })
+    TabServer:CreateButton({ Name = "Join Low Pop Server", Callback = function() joinLowPopServer() end })
+elseif UI.type == "orion" then
+    TabServer:AddLabel("Players: "..tostring(#Players:GetPlayers()))
+    TabServer:AddButton({ Name = "Rejoin Server", Callback = function() pcall(function() TeleportService:Teleport(game.PlaceId, LocalPlayer) end) end })
+    TabServer:AddButton({ Name = "Join Other Server", Callback = function() pcall(function() TeleportService:Teleport(game.PlaceId, LocalPlayer) end) end })
+    TabServer:AddButton({ Name = "Join Low Pop Server", Callback = function() joinLowPopServer() end })
+else
+    TabServer:CreateLabel("Players: "..tostring(#Players:GetPlayers()))
+    TabServer:CreateButton({ Name = "Rejoin Server", Callback = function() pcall(function() TeleportService:Teleport(game.PlaceId, LocalPlayer) end) end })
+    TabServer:CreateButton({ Name = "Join Other Server", Callback = function() pcall(function() TeleportService:Teleport(game.PlaceId, LocalPlayer) end) end })
+    TabServer:CreateButton({ Name = "Join Low Pop Server", Callback = function() joinLowPopServer() end })
+end
+
+-- MISC
+local ok, info = pcall(function() return MarketplaceService:GetProductInfo(game.PlaceId) end)
+if ok and info and info.Name then
+    if UI.type == "rayfield" then TabMisc:CreateLabel("Game: "..tostring(info.Name)) elseif UI.type == "orion" then TabMisc:AddLabel("Game: "..tostring(info.Name)) else TabMisc:CreateLabel("Game: "..tostring(info.Name)) end
+end
+
+-- INIT
+applyGraphicsScale(60)
+startFontWatcher(currentFont)
+
+if UI.type == "orion" and WindowObj.Init then pcall(function() WindowObj:Init() end) end
+
+notify("Shiwei", "Loaded v1.6 (logo updated)", 2)
+
+-- EOF
