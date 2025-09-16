@@ -1,0 +1,168 @@
+-- shiwei-v1.7.txt
+-- Shi Wei X Sicheys - v1.7 (Orion UI full, toggleable) -
+-- Full features: Font changer, Graphics, FPS, Server, Links, Logo
+-- Toggle GUI with RightShift
+
+local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/shlexware/Orion/main/source')))()
+
+local Window = OrionLib:MakeWindow({
+    Name = "Shi Wei X Sicheys - v1.7",
+    HidePremium = false,
+    SaveConfig = true,
+    ConfigFolder = "ShiWeiHub",
+    IntroText = "Shi Wei X Sicheys v1.7",
+    CloseBind = Enum.KeyCode.RightShift -- Toggle GUI
+})
+
+-- Home Tab
+local HomeTab = Window:MakeTab({
+    Name = "Home",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+HomeTab:AddParagraph("Author", "shi wei & sicheys")
+HomeTab:AddButton({
+    Name = "Copy Discord Link",
+    Callback = function()
+        setclipboard("https://discord.gg/VRUeqKfDq2")
+    end
+})
+HomeTab:AddButton({
+    Name = "Copy Facebook Link",
+    Callback = function()
+        setclipboard("https://www.facebook.com/share/1JBQN79NvP/")
+    end
+})
+local logo = Instance.new("ImageLabel")
+logo.Image = "rbxassetid://15307540185"
+logo.Size = UDim2.new(0,100,0,100)
+logo.Position = UDim2.new(0,0,0,0)
+logo.BackgroundTransparency = 1
+logo.Parent = game.CoreGui:WaitForChild("Orion")
+
+-- Font Tab
+local FontTab = Window:MakeTab({
+    Name = "Font",
+    Icon = "rbxassetid://6031071053",
+    PremiumOnly = false
+})
+local fonts = {
+    {"Arial", Enum.Font.Arial},
+    {"Georgia", Enum.Font.Fantasy},
+    {"Courier New", Enum.Font.Code},
+    {"Verdana", Enum.Font.Roboto},
+    {"Helvetica", Enum.Font.Gotham},
+    {"Minecraft", Enum.Font.Arcade}
+}
+for _, font in ipairs(fonts) do
+    FontTab:AddButton({
+        Name = font[1],
+        Callback = function()
+            for _, v in ipairs(game:GetDescendants()) do
+                if v:IsA("TextLabel") or v:IsA("TextButton") or v:IsA("TextBox") then
+                    v.Font = font[2]
+                end
+            end
+        end
+    })
+end
+
+-- Graphics Tab
+local GraphicsTab = Window:MakeTab({
+    Name = "Graphics",
+    Icon = "rbxassetid://6031071053",
+    PremiumOnly = false
+})
+GraphicsTab:AddSlider({
+    Name = "Độ hoạ (20-90)",
+    Min = 20,
+    Max = 90,
+    Default = 60,
+    Callback = function(value)
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 + math.floor(value/10)
+    end
+})
+GraphicsTab:AddButton({
+    Name = "Xoá sương mù",
+    Callback = function()
+        if game.Lighting:FindFirstChildOfClass("Atmosphere") then
+            game.Lighting:FindFirstChildOfClass("Atmosphere"):Destroy()
+        end
+        game.Lighting.FogEnd = 1e9
+    end
+})
+GraphicsTab:AddButton({
+    Name = "Boost đồ hoạ",
+    Callback = function()
+        game.Lighting.Brightness = 3
+        game.Lighting.GlobalShadows = true
+        game.Lighting.Ambient = Color3.fromRGB(128,128,128)
+    end
+})
+
+-- FPS Tab
+local FPSTab = Window:MakeTab({
+    Name = "FPS",
+    Icon = "rbxassetid://6031071053",
+    PremiumOnly = false
+})
+local fpsLabel
+FPSTab:AddToggle({
+    Name = "Hiện FPS",
+    Default = false,
+    Callback = function(state)
+        if state then
+            local RunService = game:GetService("RunService")
+            local gui = Instance.new("TextLabel")
+            gui.Size = UDim2.new(0,200,0,50)
+            gui.Position = UDim2.new(0,10,0,10)
+            gui.TextColor3 = Color3.new(1,1,1)
+            gui.BackgroundTransparency = 1
+            gui.TextSize = 20
+            gui.Font = Enum.Font.Gotham
+            gui.Text = "FPS: ..."
+            gui.Parent = game.CoreGui
+            fpsLabel = gui
+            local last = tick()
+            local frames = 0
+            RunService.RenderStepped:Connect(function()
+                frames += 1
+                if tick() - last >= 1 then
+                    local fps = math.floor(frames / (tick()-last))
+                    fpsLabel.Text = "FPS: "..fps
+                    frames = 0
+                    last = tick()
+                end
+            end)
+        elseif fpsLabel then
+            fpsLabel:Destroy()
+        end
+    end
+})
+
+-- Server Tab
+local ServerTab = Window:MakeTab({
+    Name = "Server",
+    Icon = "rbxassetid://6031071053",
+    PremiumOnly = false
+})
+ServerTab:AddButton({
+    Name = "Join lại server",
+    Callback = function()
+        game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, game.JobId, game.Players.LocalPlayer)
+    end
+})
+ServerTab:AddButton({
+    Name = "Join server ngẫu nhiên",
+    Callback = function()
+        game:GetService("TeleportService"):Teleport(game.PlaceId)
+    end
+})
+ServerTab:AddButton({
+    Name = "Join server ít người",
+    Callback = function()
+        loadstring(game:HttpGet("https://pastebin.com/raw/L3fWxZBj"))()
+    end
+})
+
+OrionLib:Init()
