@@ -1,0 +1,135 @@
+-- shiwei-v1.5_fixed.txt
+-- Shi Wei X Sicheys - v1.5 (Fixed) -
+
+--// GUI Init
+local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/shlexware/Orion/main/source"))()
+
+local Window = OrionLib:MakeWindow({
+    Name = "Shi Wei X Sicheys - v1.5",
+    HidePremium = false,
+    SaveConfig = true,
+    ConfigFolder = "shiwei_config"
+})
+
+--// Tabs
+local HomeTab = Window:MakeTab({
+    Name = "Home",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+local FontTab = Window:MakeTab({
+    Name = "Font",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+local GraphicsTab = Window:MakeTab({
+    Name = "Graphics",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+local FPSTab = Window:MakeTab({
+    Name = "FPS",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+local ServerTab = Window:MakeTab({
+    Name = "Server",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+--// Fonts
+local fonts = {"Arial", "Georgia", "Courier New", "Verdana", "Helvetica", "Minecraft"}
+for _, f in pairs(fonts) do
+    FontTab:AddButton({
+        Name = f,
+        Callback = function()
+            for _, v in pairs(game.CoreGui:GetDescendants()) do
+                if v:IsA("TextLabel") or v:IsA("TextButton") then
+                    v.Font = Enum.Font[f] or Enum.Font.SourceSans
+                end
+            end
+        end
+    })
+end
+
+--// Graphics
+GraphicsTab:AddSlider({
+    Name = "Giảm đồ hoạ (%)",
+    Min = 20,
+    Max = 90,
+    Default = 60,
+    Color = Color3.fromRGB(255,255,255),
+    Increment = 10,
+    ValueName = "%",
+    Callback = function(Value)
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 + math.floor(Value/10)
+    end    
+})
+
+GraphicsTab:AddButton({
+    Name = "Xoá sương mù",
+    Callback = function()
+        if game.Lighting:FindFirstChildOfClass("Atmosphere") then
+            game.Lighting:FindFirstChildOfClass("Atmosphere"):Destroy()
+        end
+        game.Lighting.FogEnd = 1e9
+    end
+})
+
+GraphicsTab:AddButton({
+    Name = "Tăng đồ hoạ (RTX giả lập)",
+    Callback = function()
+        game.Lighting.GlobalShadows = true
+        game.Lighting.Brightness = 3
+        game.Lighting.Ambient = Color3.fromRGB(128,128,128)
+    end
+})
+
+--// FPS
+local fpsLabel
+FPSTab:AddToggle({
+    Name = "Hiện FPS",
+    Default = false,
+    Callback = function(Value)
+        if Value then
+            local RunService = game:GetService("RunService")
+            local TextLabel = Instance.new("TextLabel")
+            TextLabel.Parent = game.CoreGui
+            TextLabel.Size = UDim2.new(0,200,0,50)
+            TextLabel.Position = UDim2.new(0,10,0,10)
+            TextLabel.TextColor3 = Color3.fromRGB(255,255,255)
+            TextLabel.BackgroundTransparency = 1
+            fpsLabel = TextLabel
+            local lastTick = tick()
+            RunService.RenderStepped:Connect(function()
+                local fps = math.floor(1/(tick()-lastTick))
+                lastTick = tick()
+                fpsLabel.Text = "FPS: "..fps
+            end)
+        else
+            if fpsLabel then fpsLabel:Destroy() end
+        end
+    end    
+})
+
+--// Server
+ServerTab:AddButton({
+    Name = "Join lại server",
+    Callback = function()
+        game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, game.JobId, game.Players.LocalPlayer)
+    end
+})
+
+ServerTab:AddButton({
+    Name = "Tìm server ít người",
+    Callback = function()
+        loadstring(game:HttpGet("https://pastebin.com/raw/L3fWxZBj"))()
+    end
+})
+
+OrionLib:Init()
