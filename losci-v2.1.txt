@@ -1,0 +1,265 @@
+-- losci-v2.1.txt
+-- Shi Wei X Sicheys Hub - Stable Orion GUI (v2.1)
+-- Tabs: Font, Fake Animation, Movement, Visual, Troll, World
+
+-- Services
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+
+-- OrionLib
+local success, OrionLib = pcall(function()
+    return loadstring(game:HttpGet("https://raw.githubusercontent.com/shlexware/Orion/main/source"))()
+end)
+if not success or not OrionLib then
+    warn("OrionLib không tải được!")
+    return
+end
+
+local Window = OrionLib:MakeWindow({
+    Name = "Shi Wei X Sicheys - v2.1",
+    HidePremium = false,
+    SaveConfig = true,
+    ConfigFolder = "LosciHub",
+    IntroText = "Shi Wei Hub v2.1",
+    CloseBind = Enum.KeyCode.RightShift
+})
+
+-- =============== TAB: FONT ===============
+local FontTab = Window:MakeTab({Name = "-SET FONT-", Icon = "rbxassetid://4483345998", PremiumOnly = false})
+
+local FontMap = {
+    {"Georgia", Enum.Font.Fantasy},
+    {"Verdana", Enum.Font.Roboto},
+    {"Courier New", Enum.Font.Code},
+    {"Helvetica", Enum.Font.Gotham},
+    {"Arial", Enum.Font.Arial},
+    {"Minecraft", Enum.Font.Arcade}
+}
+
+for _, pair in ipairs(FontMap) do
+    local name, fontEnum = pair[1], pair[2]
+    FontTab:AddButton({
+        Name = name,
+        Callback = function()
+            for _, obj in pairs(game:GetDescendants()) do
+                if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
+                    pcall(function() obj.Font = fontEnum end)
+                end
+            end
+            OrionLib:MakeNotification({Name = "Font", Content = "Đã đổi sang "..name, Time = 2})
+        end
+    })
+end
+
+-- =============== TAB: ANIMATION ===============
+local AnimTab = Window:MakeTab({Name = "-FAKE ANIMATION-", Icon = "rbxassetid://6031071053", PremiumOnly = false})
+local animIdBox = AnimTab:AddTextbox({Name = "Animation ID", Default = "", TextDisappear = false})
+local animTrack
+
+AnimTab:AddButton({
+    Name = "Play Animation",
+    Callback = function()
+        local id = animIdBox.Value
+        if id == "" then return end
+        local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            local anim = Instance.new("Animation")
+            anim.AnimationId = "rbxassetid://"..id
+            animTrack = humanoid:LoadAnimation(anim)
+            animTrack:Play()
+        end
+    end
+})
+AnimTab:AddButton({
+    Name = "Stop Animation",
+    Callback = function()
+        if animTrack then animTrack:Stop() end
+    end
+})
+
+-- =============== TAB: MOVEMENT ===============
+local MoveTab = Window:MakeTab({Name = "-MOVEMENT-", Icon = "rbxassetid://6031071053", PremiumOnly = false})
+local flyEnabled, infJump, walkWalls = false, false, false
+local flyBV
+
+-- Fly toggle
+MoveTab:AddToggle({
+    Name = "Fly (E toggle)",
+    Default = false,
+    Callback = function(state) flyEnabled = state end
+})
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if not gpe and input.KeyCode == Enum.KeyCode.E then flyEnabled = not flyEnabled end
+end)
+
+RunService.RenderStepped:Connect(function()
+    if flyEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local hrp = LocalPlayer.Character.HumanoidRootPart
+        if not flyBV then
+            flyBV = Instance.new("BodyVelocity", hrp)
+            flyBV.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+        end
+        flyBV.Velocity = hrp.CFrame.LookVector * 50
+    elseif flyBV then
+        flyBV:Destroy()
+        flyBV = nil
+    end
+end)
+
+-- Speed
+MoveTab:AddSlider({
+    Name = "WalkSpeed",
+    Min = 16, Max = 150, Default = 16,
+    Callback = function(val)
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+            LocalPlayer.Character:FindFirstChildOfClass("Humanoid").WalkSpeed = val
+        end
+    end
+})
+
+-- Inf Jump
+MoveTab:AddToggle({
+    Name = "Infinite Jump",
+    Default = false,
+    Callback = function(state) infJump = state end
+})
+UserInputService.JumpRequest:Connect(function()
+    if infJump and LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+        LocalPlayer.Character:FindFirstChildOfClass("Humanoid"):ChangeState(Enum.HumanoidStateType.Jumping)
+    end
+end)
+
+-- Air Platform
+MoveTab:AddButton({
+    Name = "Spawn Air Platform",
+    Callback = function()
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local hrp = LocalPlayer.Character.HumanoidRootPart
+            local p = Instance.new("Part")
+            p.Size = Vector3.new(6,1,6)
+            p.Position = hrp.Position - Vector3.new(0,3,0)
+            p.Anchored = true
+            p.Transparency = 0.5
+            p.Parent = workspace
+            game:GetService("Debris"):AddItem(p, 5)
+        end
+    end
+})
+
+-- WalkOnWalls
+MoveTab:AddToggle({
+    Name = "Walk On Walls",
+    Default = false,
+    Callback = function(state) walkWalls = state end
+})
+RunService.Stepped:Connect(function()
+    if walkWalls and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local hrp = LocalPlayer.Character.HumanoidRootPart
+        hrp.Velocity = Vector3.new(hrp.Velocity.X, 20, hrp.Velocity.Z)
+    end
+end)
+
+-- FOV slider
+MoveTab:AddSlider({
+    Name = "FOV",
+    Min = 40, Max = 120, Default = 70,
+    Callback = function(val) workspace.CurrentCamera.FieldOfView = val end
+})
+MoveTab:AddButton({Name = "Reset FOV", Callback = function() workspace.CurrentCamera.FieldOfView = 70 end})
+
+-- =============== TAB: VISUAL ===============
+local VisTab = Window:MakeTab({Name = "-VISUAL-", Icon = "rbxassetid://6031071053", PremiumOnly = false})
+
+VisTab:AddToggle({
+    Name = "Footstep Effect",
+    Default = false,
+    Callback = function(state)
+        if state then
+            LocalPlayer.Character.Humanoid.StateChanged:Connect(function(_, new)
+                if new == Enum.HumanoidStateType.Running then
+                    local part = Instance.new("Part")
+                    part.Size = Vector3.new(1,0.2,1)
+                    part.Position = LocalPlayer.Character.HumanoidRootPart.Position - Vector3.new(0,3,0)
+                    part.Anchored, part.CanCollide, part.Transparency = true, false, 0.3
+                    part.BrickColor = BrickColor.Random()
+                    part.Parent = workspace
+                    game:GetService("Debris"):AddItem(part, 2)
+                end
+            end)
+        end
+    end
+})
+
+VisTab:AddButton({
+    Name = "Aura Effect",
+    Callback = function()
+        if LocalPlayer.Character and not LocalPlayer.Character:FindFirstChild("Aura") then
+            local aura = Instance.new("ParticleEmitter")
+            aura.Name = "Aura"
+            aura.Parent = LocalPlayer.Character.HumanoidRootPart
+            aura.Texture = "rbxassetid://243098098"
+            aura.Rate = 20
+            aura.Lifetime = NumberRange.new(1)
+            aura.Speed = NumberRange.new(1)
+        end
+    end
+})
+
+-- =============== TAB: TROLL ===============
+local TrollTab = Window:MakeTab({Name = "-TROLL-", Icon = "rbxassetid://6031071053", PremiumOnly = false})
+
+TrollTab:AddButton({Name = "Ghost Jumpscare", Callback = function()
+    local gui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
+    local img = Instance.new("ImageLabel", gui)
+    img.Size, img.Position, img.BackgroundTransparency = UDim2.new(1,0,1,0), UDim2.new(0,0,0,0), 1
+    img.Image = "rbxassetid://4809574297"
+    local snd = Instance.new("Sound", gui)
+    snd.SoundId = "rbxassetid://9122402600"; snd:Play()
+    game:GetService("Debris"):AddItem(gui, 3)
+end})
+
+TrollTab:AddButton({Name = "Screen Shake", Callback = function()
+    local cam = workspace.CurrentCamera
+    for i=1,20 do
+        cam.CFrame = cam.CFrame * CFrame.new(math.random(-1,1)/5, math.random(-1,1)/5, 0)
+        task.wait(0.05)
+    end
+end})
+
+TrollTab:AddButton({Name = "Invert Colors", Callback = function()
+    local cc = Instance.new("ColorCorrectionEffect", Lighting)
+    cc.Name = "Invert"; cc.TintColor = Color3.new(1,1,1)
+    cc.Contrast = -1
+    game:GetService("Debris"):AddItem(cc, 5)
+end})
+
+-- =============== TAB: WORLD ===============
+local WorldTab = Window:MakeTab({Name = "-WORLD-", Icon = "rbxassetid://6031071053", PremiumOnly = false})
+
+WorldTab:AddButton({Name = "Sunny Day", Callback = function()
+    Lighting.TimeOfDay, Lighting.Brightness, Lighting.FogEnd = "12:00:00", 2, 100000
+end})
+WorldTab:AddButton({Name = "Night Sky", Callback = function()
+    Lighting.TimeOfDay, Lighting.Brightness, Lighting.FogEnd = "00:00:00", 0.5, 500
+end})
+WorldTab:AddButton({Name = "Nether", Callback = function()
+    Lighting.Ambient = Color3.fromRGB(255,100,0)
+    Lighting.FogColor = Color3.fromRGB(255,50,0)
+    Lighting.FogEnd = 200
+end})
+WorldTab:AddButton({Name = "End", Callback = function()
+    Lighting.Ambient = Color3.fromRGB(150,0,255)
+    Lighting.FogColor = Color3.fromRGB(100,0,150)
+    Lighting.FogEnd = 300
+end})
+WorldTab:AddButton({Name = "Reset", Callback = function()
+    Lighting.Ambient = Color3.fromRGB(0,0,0)
+    Lighting.FogEnd = 100000
+    Lighting.TimeOfDay = "14:00:00"
+end})
+
+OrionLib:Init()
